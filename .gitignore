@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
+
+# Lab artifacts that should NOT be published
+*.dmp
+*.dump
+lsass*.dmp
+*.kirbi
+*.ccache
+secrets/
+loot/
