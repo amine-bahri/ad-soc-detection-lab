@@ -13,11 +13,22 @@ Thumbs.db
 .idea/
 .vscode/
 
-# Lab artifacts that should NOT be published
+# Lab artifacts that must NOT be published (credential material / offensive tooling)
 *.dmp
 *.dump
 lsass*.dmp
 *.kirbi
 *.ccache
+*.ntds
+ntds.dit
+
+# Mimikatz binary and any credential-bearing transcripts
+mimikatz*
+*mimikatz*
+transcript-*.txt
+*-transcript.txt
+
+# Raw evidence staging (keep OUTSIDE the repo; commit only sanitized copies)
 secrets/
 loot/
+D01-evidence/
