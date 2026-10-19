@@ -6,6 +6,8 @@ Each detection is treated as a tested hypothesis, with positive and negative tes
 
 > EURECOM semester project, Fall 2026. Security in Computer Systems and Communications. Supervisor: Aurélien Francillon.
 
+**Current work:** the first detection, D01 (Suspicious LSASS Access, T1003.001), is documented end to end in [`analytics/D01-lsass-access`](./analytics/D01-lsass-access/README.md): four execution variants against four Sysmon telemetry types, a tuned Sigma rule, a measured baseline, and stated limitations. It is the worked example of the methodology below.
+
 ---
 
 ## Objectives
@@ -76,7 +78,7 @@ The project is currently in Phase 2. Detection analytics are built Splunk-first,
 
 | ID | Objective | ATT&CK | Tactic | Status |
 |---|---|---|---|---|
-| D01 | Suspicious LSASS access | T1003.001 | Credential Access | complete |
+| D01 | Suspicious LSASS access | T1003.001 | Credential Access | complete (Splunk) |
 | D02 | Suspicious PowerShell execution | T1059.001 | Execution | planned |
 | D03 | Suspicious service-ticket requests (Kerberoasting) | T1558.003 | Credential Access | planned |
 | D04 | Suspicious remote service execution | T1021.002 / T1569.002 | Lateral Movement | planned |
