@@ -10,7 +10,7 @@ description: >
     0x1FFFFF and are suppressed by full path.
 references:
     - https://attack.mitre.org/techniques/T1003/001/
-author: Mohamed Amine Bahri
+author: Mohamed Amine BAHRI
 date: 2026-10-13
 modified: 2026-10-18
 tags:
@@ -50,6 +50,8 @@ level: medium
 #        dbghelp/dbgcore load (EID 7), a .dmp of lsass (EID 11),
 #        a dump-engine call trace (dbgcore/dbghelp/comsvcs), or an uncommon
 #        source image / lineage / signer / user (e.g. Administrator -> SYSTEM).
-#   The high tier also re-catches a benign image abused by injection: a clean
-#   wininit/csrss call trace differs from a dump-engine one.
+# Known gap: code injected into a suppressed image (wininit/csrss/Sysmon) is NOT
+#   caught by the tuned search, which removes those sources before any call-trace
+#   check. Closing it needs a separate high-confidence search over ALL sources,
+#   keyed on a dump-engine or unbacked-memory call stack. See write-up limitations.
 # Note: the mask list APPROXIMATES the bitwise VM_READ test; Sigma can't do & cleanly.
