@@ -1,36 +1,25 @@
-// D01 - Suspicious LSASS Access - T1003.001
-// Detection = union of S4 (behavioural, primary) and S3 (artifact, complementary).
-// Baseline (2026-10-18, sensor-validated) found 3 benign SYSTEM accessors at BOOT:
-// wininit.exe, csrss.exe, Sysmon64.exe (all 0x1FFFFF, suppressed by full path).
+```
+D01 - Suspicious LSASS Access (T1003.001).
+Documentation of the S4 (behavioural) and S3 (artifact) Splunk searches.
+Copy ONE search block at a time; the ``` ``` lines are Splunk inline comments.
+Baseline (2026-10-18, sensor-validated): benign SYSTEM accessors at boot were
+wininit.exe, csrss.exe, Sysmon64.exe (all 0x1FFFFF), suppressed by full path.
+```
 
-// ============================================================
-// S4 - behavioural (primary): a process opens lsass with a read-capable mask
-// ============================================================
-
-// --- UNTUNED (initial detection + its boot-time noise) ---
+```S4 behavioural, UNTUNED: any process opening lsass with a read-capable mask (initial detection plus boot-time noise).```
 index=endpoint source="XmlWinEventLog:Microsoft-Windows-Sysmon/Operational" EventCode=10 TargetImage="*lsass.exe"
 | eval ga=upper(GrantedAccess)
 | search ga IN ("0X1010","0X1410","0X1438","0X143A","0X1FFFFF","0X1F1FFF","0X1F3FFF")
 | table _time host SourceImage GrantedAccess CallTrace
 
-// --- TUNED (benign SYSTEM sources suppressed by FULL PATH) ---
+```S4 behavioural, TUNED: benign SYSTEM sources suppressed by full path. Over 2026-10-15: untuned 11 events (6 benign boot, 5 attack), tuned 5 events (A1, A2 x3, A4), 0 benign.```
 index=endpoint source="XmlWinEventLog:Microsoft-Windows-Sysmon/Operational" EventCode=10 TargetImage="*lsass.exe"
 | eval ga=upper(GrantedAccess)
 | search ga IN ("0X1010","0X1410","0X1438","0X143A","0X1FFFFF","0X1F1FFF","0X1F3FFF")
 | search NOT (SourceImage="C:\\Windows\\system32\\wininit.exe" OR SourceImage="C:\\Windows\\system32\\csrss.exe" OR SourceImage="C:\\Windows\\Sysmon64.exe")
 | table _time host SourceImage GrantedAccess CallTrace
-// Over 2026-10-15: untuned = 11 hits (6 benign boot + 5 attack); tuned = 5 (A1, A2x3, A4), 0 FP.
 
-// --- HIGH tier (corroboration: promote a medium hit backed by a dump-engine call stack) ---
-// Note: catches A1/A2; Mimikatz (A4) has no dump engine, so it relies on mask + non-system source.
-// ... (same as TUNED) ... | search CallTrace="*dbghelp.dll*" OR CallTrace="*dbgcore.dll*" OR CallTrace="*comsvcs.dll*"
-
-// ============================================================
-// S3 - artifact (complementary): an lsass dump file is written to disk.
-// Covers A3 (Task Manager), which S4 cannot see (excluded from EID 10 at the sensor).
-// ============================================================
+```S3 artifact: a dump file written to disk. Covers A3 (Task Manager), which S4 cannot see. EID 11 FileCreate names the creating process in Image (NOT SourceImage). The tool branch also matches a benign .dmp by these tools, so treat a hit as a lead to corroborate against the S4 access event (same host and process), not proof the dump is of lsass.```
 index=endpoint source="XmlWinEventLog:Microsoft-Windows-Sysmon/Operational" EventCode=11 TargetFilename="*.dmp"
-| search TargetFilename="*lsass*" OR SourceImage IN ("*\\taskmgr.exe","*\\procdump.exe","*\\procdump64.exe","*\\rundll32.exe")
-| table _time host SourceImage TargetFilename
-// Limitation: an attacker can rename/relocate the dump file to dodge the filename hint;
-// the source-tool list is the more robust half.
+| search TargetFilename="*lsass*" OR Image IN ("*\\taskmgr.exe","*\\procdump.exe","*\\procdump64.exe","*\\rundll32.exe")
+| table _time host Image TargetFilename
