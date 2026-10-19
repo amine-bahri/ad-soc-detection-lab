@@ -27,7 +27,7 @@ Windows endpoints (DC + Target-PC)
 | Source | Purpose | Status |
 |---|---|---|
 | Sysmon Operational | Process creation, process access, image load, file create, network, named pipes | collected |
-| Windows Security | Logons, account changes, Kerberos | to verify |
+| Windows Security | Logons, account changes, Kerberos | collected |
 | PowerShell Operational (script-block, EID 4104) | PowerShell content logging | to enable |
 
 ## Diagram
