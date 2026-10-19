@@ -35,7 +35,7 @@ Four detection angles (Sysmon event IDs):
 |---|---|---|---|---|
 | **A1 comsvcs** | HIT | HIT | HIT | HIT |
 | **A2 procdump** | HIT | HIT | HIT | HIT |
-| **A3 taskmgr** | N/A | HIT | HIT | MISS |
+| **A3 taskmgr** | N/A | HIT | HIT | not collected |
 | **A4 mimikatz** | HIT (tool-specific strings) | MISS | N/A | HIT |
 
 ## What the matrix shows
@@ -45,9 +45,9 @@ Four detection angles (Sysmon event IDs):
 - **S3 (dump file)** catches anything that writes a dump to disk: A1, A2, A3. Mimikatz writes nothing, so S3 does not apply to it.
 - **S4 (process access)** catches the act itself and hit A1, A2, A4. It misses A3 only because the Sysmon config excludes Task Manager as a source at the sensor, so no event is ever produced. You cannot query an event that was never collected, so A3 is covered by S3 instead.
 
-Net: **S4 covers the fileless family, S3 covers the file-writing family, and A3 and A4 each sit in the other's blind spot. The detection is the union of the two.**
+Net: **across the four variants tested, S4 catches the in-memory one (Mimikatz) and S3 catches the file-writing ones, with A3 and A4 each sitting in the other's blind spot. The detection is the union of the two.**
 
-The one thing S4 relies on: every method had to open lsass and request read access to its memory (the PROCESS_VM_READ right). The exact mask differed, full access (0x1FFFFF) for the file dumpers, a lean query-plus-read (0x1010) for Mimikatz, but the read bit was always set. That is what lets one behavioural rule catch tools it has never seen.
+The one thing S4 relies on: each of the four methods had to open lsass and ask to read its memory (the PROCESS_VM_READ right, which any direct memory read requires). The exact mask differed, full access (0x1FFFFF) for the file dumpers, a lean query-plus-read (0x1010) for Mimikatz, but the read bit was always set, which is what lets one behavioural rule catch tools it has not seen. Indirect paths that avoid a fresh read handle, such as duplicating an existing handle or dumping a process clone, would evade this signal; those belong to the evasion study.
 
 ## The rules
 
@@ -55,7 +55,7 @@ Two analytics. Files: `rule.yml` (S4), `rule-dumpfile.yml` (S3), `rule.spl` (bot
 
 **S4, behavioural (primary).** A process opens lsass with a read-capable mask. The mask is an enumerated list (`0x1010`, `0x1410`, `0x1438`, `0x143A`, `0x1FFFFF`, `0x1F1FFF`, `0x1F3FFF`) that stands in for the real test, "does the mask include the read bit, `& 0x0010`." Sigma cannot express a bitwise AND, so the list approximates it; any value with that bit set belongs. Benign boot-time access by wininit, csrss and Sysmon is suppressed by full path, because those processes open lsass with the same full-access mask as the attacks.
 
-**S3, artifact (complementary).** A dump file of lsass is written to disk. This is what covers A3, which S4 cannot see.
+**S3, artifact (complementary).** A dump file is written to disk by a known dump tool, or named like an lsass dump (Sysmon EID 11, which names the creating process in the `Image` field, not `SourceImage`). This covers A3, which S4 cannot see. Treat a hit as a lead, not proof the dump is of lsass: a benign `.dmp` written by one of these tools also matches, so corroborate against the S4 access event on the same host and process. The rule is named for what it observes, not what it concludes.
 
 Severity: an S4 hit is **medium**, meaning a process gained the ability to read lsass (worth triage). It rises to **high** when corroborated by a dump file, a dump-engine call stack (dbghelp/dbgcore/comsvcs), or an unusual source process. That keeps the common case low-noise without discarding it.
 
@@ -64,18 +64,20 @@ Severity: an S4 hit is **medium**, meaning a process gained the ability to read 
 Over the attack day (2026-10-15), Defender off:
 
 - **S4 untuned: 11 hits** (6 benign boot-time, 5 attack).
-- **S4 tuned** (benign sources suppressed): **5 hits, all attacks, 0 false positives, nothing lost.**
+- **S4 tuned** (benign sources suppressed): **5 events, all from the attacks, 0 benign matches, nothing lost.**
+
+Two honest caveats on those numbers. The 5 are events, not independent trials: there were four attack runs (A2 opens lsass several times, which is why it shows three events). And the 0 is a development result measured on the same dataset the tuning came from, so it is not yet an independent false-positive rate; the next test is a fresh reboot, logon and ordinary-use window.
 
 The benign boot-time access is exactly why the mask alone is not enough: wininit opens lsass with `0x1FFFFF`, the same mask ProcDump and comsvcs use. Same mask, opposite intent. The rule handles this by suppressing trusted source processes, not by trusting the mask by itself.
 
 ## Why run with Defender off
 
-The attacks ran with Defender off to isolate the detection layer from the prevention layer. On a default endpoint, Defender does block comsvcs and ProcDump against lsass, and I confirmed that in a prevention test. But a SOC cannot assume prevention is present or effective: the LSASS ASR rule is frequently unconfigured, attackers disable or add exclusions to AV, and signatures are tool-specific while behaviour is not. There is also a concrete trap, which I saw in the data: when Defender blocks the attack at launch, it leaves no Sysmon telemetry at all, so a SOC relying on prevention alone is blind in the SIEM. Detection is the layer that catches what prevention misses, and this rule keys on behaviour, not on any specific tool.
+The attacks ran with Defender off to isolate the detection layer from the prevention layer. On a default endpoint, Defender does block comsvcs and ProcDump against lsass, and I confirmed that in a prevention test. But a SOC cannot assume prevention is present or effective: the LSASS ASR rule is frequently unconfigured, attackers disable or add exclusions to AV, and signatures are tool-specific while behaviour is not. There is also a concrete trap, which I saw in the data: when Defender blocked the attack at launch, Sysmon recorded nothing, so the inspected SIEM window was empty. The only trace was in Defender's own operational log, which this lab did not forward. The lesson is to collect prevention telemetry separately, not to infer that nothing happened from missing Sysmon events. Detection is the layer that catches what prevention misses, and this rule keys on behaviour, not on any specific tool.
 
 ## Limitations
 
 - **Mask approximation.** The enumerated list stands in for the bitwise read-bit test. A mask with the read bit set but not in the list would be missed. The list is extensible.
-- **Suppression by source process.** Excluding wininit, csrss and Sysmon by path means an attacker who injects code into one of them, or masquerades as them in a non-system path, could slip the medium tier. The full-path match blocks the rename case, and the high tier catches the rest: a benign boot-time access goes only through ntdll, kernel and the process's own code, while injected dumping code shows the dump engine or unbacked (UNKNOWN) memory frames.
+- **Suppression by source process.** Excluding wininit, csrss and Sysmon by path means an attacker who injects code into one of them, or masquerades as them in a non-system path, could slip the behavioural rule. The full-path match blocks the rename case. The injection case is a known gap, not yet closed: the tuned search removes those sources before it inspects anything, so it cannot re-catch them. Closing it needs a separate high-confidence search that looks at every lsass open with a dump-engine or unbacked-memory call stack, regardless of source. That is part of the evasion study.
 - **The low false-positive surface is partly earned by the config's own tuning**, not only by a quiet environment. A log-everything ProcessAccess config produced 91 benign events in seconds in a control test. State the result as "near-zero under this tuned collection."
 - **The S3 dump-file rule can be evaded** by naming the dump file something unremarkable and writing it to an unusual path. The source-tool half of the rule is the more robust part.
 - **Lab, not production.** One workstation, one domain, a known set of tools. Re-measure the baseline, including a boot cycle, before deploying anywhere real.
@@ -96,3 +98,7 @@ Full per-variant captures backing each cell of the matrix are in `evidence/`, na
 ## Credential hygiene
 
 Mimikatz succeeded for a disposable lab account. Per lab policy, the recovered credential material was not screenshotted, saved, or committed. This repository contains only sanitized proof statements, the detection logic, and detection-side screenshots. The Mimikatz binary, any `.dmp` files, and the credential-bearing PowerShell transcript are excluded (`.gitignore` blocks them).
+
+## Credits
+
+Sysmon configuration: olafhartong's [sysmon-modular](https://github.com/olafhartong/sysmon-modular), balanced profile, used under its own license and frozen by hash for this study.
