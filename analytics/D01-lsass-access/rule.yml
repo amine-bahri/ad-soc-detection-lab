@@ -1,0 +1,55 @@
+title: Suspicious LSASS Process Access (Memory-Read Handle)
+id: 8f1e2a90-1c3b-4d55-9a21-d01a55e55001
+status: experimental
+description: >
+    A process opens a handle to lsass.exe with memory-read-capable access,
+    consistent with OS Credential Dumping via LSASS memory (T1003.001).
+    Detects access CAPABILITY, not proof of extraction. Tuned against a
+    measured, sensor-validated benign baseline on the lab host (Target-PC):
+    benign SYSTEM processes (wininit, csrss, Sysmon64) open lsass at boot with
+    0x1FFFFF and are suppressed by full path.
+references:
+    - https://attack.mitre.org/techniques/T1003/001/
+author: Mohamed Amine Bahri
+date: 2026-10-13
+modified: 2026-10-18
+tags:
+    - attack.credential_access
+    - attack.t1003.001
+logsource:
+    category: process_access
+    product: windows
+detection:
+    selection:
+        TargetImage|endswith: '\lsass.exe'
+        GrantedAccess:   # enumerated approximation of (GrantedAccess & 0x0010) != 0  (PROCESS_VM_READ)
+            - '0x1010'    # observed: A4 mimikatz
+            - '0x1410'    # observed: benign OpenProcess validation probe
+            - '0x1438'
+            - '0x143A'
+            - '0x1FFFFF'  # observed: A1 comsvcs, A2 procdump -- AND benign wininit/csrss/Sysmon64
+            - '0x1F1FFF'
+            - '0x1F3FFF'
+    # Benign SYSTEM processes that open lsass at boot/logon (measured in the baseline).
+    # They use 0x1FFFFF too, so mask alone cannot separate them from A1/A2; suppress by
+    # FULL PATH. Residual risk: injection into / masquerade as these images -- mitigated
+    # by the full-path match plus the high-tier call-trace corroboration (clean trace vs
+    # a dbgcore/dbghelp/comsvcs dump-engine trace).
+    filter_benign_system:
+        SourceImage:
+            - 'C:\Windows\system32\wininit.exe'
+            - 'C:\Windows\system32\csrss.exe'
+            - 'C:\Windows\Sysmon64.exe'
+    condition: selection and not filter_benign_system
+falsepositives:
+    - Boot/logon-time access by SYSTEM components (wininit, csrss, Sysmon) -- suppressed by path above. Re-measure the baseline INCLUDING a boot cycle in each environment; add any new benign source here with path / signer / mask / parent / reason / risk.
+level: medium
+# Tiering (independent detection paths, not an AND-only rule):
+#   medium (this rule) = a process obtained LSASS memory-read capability -> triage
+#   high (corroboration) = access + any of: suspicious EID 1 command line,
+#        dbghelp/dbgcore load (EID 7), a .dmp of lsass (EID 11),
+#        a dump-engine call trace (dbgcore/dbghelp/comsvcs), or an uncommon
+#        source image / lineage / signer / user (e.g. Administrator -> SYSTEM).
+#   The high tier also re-catches a benign image abused by injection: a clean
+#   wininit/csrss call trace differs from a dump-engine one.
+# Note: the mask list APPROXIMATES the bitwise VM_READ test; Sigma can't do & cleanly.
