@@ -32,9 +32,9 @@ detection:
             - '0x1F3FFF'
     # Benign SYSTEM processes that open lsass at boot/logon (measured in the baseline).
     # They use 0x1FFFFF too, so mask alone cannot separate them from A1/A2; suppress by
-    # FULL PATH. Residual risk: injection into / masquerade as these images -- mitigated
-    # by the full-path match plus the high-tier call-trace corroboration (clean trace vs
-    # a dbgcore/dbghelp/comsvcs dump-engine trace).
+    # FULL PATH (this avoids suppressing a copy of the same name in another location).
+    # Injection into an excluded process remains a known blind spot; no high-confidence
+    # detection for that case is implemented here (see write-up limitations).
     filter_benign_system:
         SourceImage:
             - 'C:\Windows\system32\wininit.exe'
