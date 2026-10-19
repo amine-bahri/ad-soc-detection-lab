@@ -3,7 +3,7 @@
 ## Network
 
 - **Domain:** `amine.local` (NetBIOS `AMINE`)
-- **Network:** `192.168.10.0/24` (VirtualBox NAT Network, isolated lab)
+- **Network:** `192.168.10.0/24` (VirtualBox NAT Network). Isolated from other hosts on the physical network; outbound internet is available through NAT, so this is a contained lab, not air-gapped.
 
 | Host | IP | Role |
 |---|---|---|
@@ -27,7 +27,7 @@ Windows endpoints (DC + Target-PC)
 | Source | Purpose | Status |
 |---|---|---|
 | Sysmon Operational | Process creation, process access, image load, file create, network, named pipes | collected |
-| Windows Security | Logons, account changes, Kerberos | collected |
+| Windows Security | Logons, account changes, Kerberos | workstation logons collected; DC audit policy (4769, 4728/4732) to verify |
 | PowerShell Operational (script-block, EID 4104) | PowerShell content logging | to enable |
 
 ## Diagram
