@@ -29,7 +29,7 @@ Four ways to dump lsass:
 Four detection angles (Sysmon event IDs):
 - **S1** command line (EID 1) · **S2** DLL load (EID 7) · **S3** dump file created (EID 11) · **S4** process access to lsass (EID 10)
 
-## LSASS credential access: detection coverage across four methods
+## LSASS credential access: detection coverage 
 
 | Variant | S1 command line | S2 DLL load | S3 dump file | S4 process access |
 |---|---|---|---|---|
