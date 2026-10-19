@@ -19,7 +19,7 @@ index=endpoint source="XmlWinEventLog:Microsoft-Windows-Sysmon/Operational" Even
 | search NOT (SourceImage="C:\\Windows\\system32\\wininit.exe" OR SourceImage="C:\\Windows\\system32\\csrss.exe" OR SourceImage="C:\\Windows\\Sysmon64.exe")
 | table _time host SourceImage GrantedAccess CallTrace
 
-```S3 artifact: a dump file written to disk. Covers A3 (Task Manager), which S4 cannot see. EID 11 FileCreate names the creating process in Image (NOT SourceImage). The tool branch also matches a benign .dmp by these tools, so treat a hit as a lead to corroborate against the S4 access event (same host and process), not proof the dump is of lsass.```
+```S3 artifact: a dump file written to disk. Covers A3 (Task Manager), which S4 cannot see. EID 11 FileCreate names the creating process in Image (NOT SourceImage). The tool branch also matches a benign .dmp by these tools, so a hit is a lead, not proof the dump is of lsass. Corroborate with an S4 access event where one exists; for Task Manager there is no S4 event (expected), so triage by path, creating process and surrounding activity.```
 index=endpoint source="XmlWinEventLog:Microsoft-Windows-Sysmon/Operational" EventCode=11 TargetFilename="*.dmp"
 | search TargetFilename="*lsass*" OR Image IN ("*\\taskmgr.exe","*\\procdump.exe","*\\procdump64.exe","*\\rundll32.exe")
 | table _time host Image TargetFilename
