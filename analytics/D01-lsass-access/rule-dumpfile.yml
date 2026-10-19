@@ -1,9 +1,12 @@
-title: LSASS Memory Dump File Written to Disk (T1003.001)
+title: Suspicious Dump File Creation (possible LSASS dumping, T1003.001)
 id: 8f1e2a90-1c3b-4d55-9a21-d01a55e55002
 status: experimental
 description: >
-    A memory dump file of lsass.exe is created on disk, consistent with
-    credential dumping by a file-based tool (comsvcs, ProcDump, Task Manager).
+    A dump file (.dmp) is created on disk, either named like an lsass dump or
+    written by a known dump-capable tool (comsvcs, ProcDump, Task Manager).
+    This is a LEAD, not proof the dump contains lsass memory: a benign dump by
+    one of these tools also matches. Corroborate against the S4 process-access
+    event (same host and process) before concluding credential dumping.
     Complements the process-access rule (rule.yml): it covers Task Manager,
     which is excluded from ProcessAccess collection at the sensor and so cannot
     be caught on EID 10.
@@ -23,7 +26,7 @@ detection:
     lsass_named:
         TargetFilename|contains: 'lsass'
     dump_tool:
-        SourceImage|endswith:
+        Image|endswith:    # EID 11 FileCreate names the creating process in Image, NOT SourceImage
             - '\taskmgr.exe'
             - '\procdump.exe'
             - '\procdump64.exe'
@@ -32,7 +35,9 @@ detection:
 falsepositives:
     - Legitimate crash dumps or diagnostics named *lsass* or written by these tools. Rare; triage by source process and path.
 level: medium
-# Limitation: an attacker can name the dump file anything and write it anywhere,
-# which evades the filename hint. The dump_tool source list is the more robust
-# half. The behavioural rule (rule.yml, EID 10) remains the primary signal; this
-# rule exists so Task Manager (A3), which EID 10 does not collect, is still caught.
+# Limitations: (1) an attacker can name the dump file anything and write it
+# anywhere, which evades the filename hint; (2) the dump_tool branch matches any
+# .dmp these tools write, including a benign dump of a non-lsass process, so it
+# can false-positive. Both are why a hit is a lead to corroborate, not a verdict.
+# The behavioural rule (rule.yml, EID 10) remains the primary signal; this rule
+# exists so Task Manager (A3), which EID 10 does not collect, is still caught.
