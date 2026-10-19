@@ -5,11 +5,12 @@ description: >
     A dump file (.dmp) is created on disk, either named like an lsass dump or
     written by a known dump-capable tool (comsvcs, ProcDump, Task Manager).
     This is a LEAD, not proof the dump contains lsass memory: a benign dump by
-    one of these tools also matches. Corroborate against the S4 process-access
-    event (same host and process) before concluding credential dumping.
+    one of these tools also matches. Corroborate with an S4 process-access event
+    where one exists. For Task Manager under the current collection there is no
+    S4 event (that is why this rule exists), so triage by file path, creating
+    process, surrounding activity, and controlled-test ground truth instead.
     Complements the process-access rule (rule.yml): it covers Task Manager,
-    which is excluded from ProcessAccess collection at the sensor and so cannot
-    be caught on EID 10.
+    which is excluded from ProcessAccess collection at the sensor.
 references:
     - https://attack.mitre.org/techniques/T1003/001/
 author: Mohamed Amine BAHRI
