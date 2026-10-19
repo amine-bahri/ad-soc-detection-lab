@@ -9,7 +9,7 @@
 
 ## TL;DR
 
-I took one credential theft technique, reading the memory of `lsass.exe`, and tested four different execution methods against four independent detection strategies. I classified every one of the sixteen cells with an evidence-based reason, measured the benign false-positive surface, and built a Sigma rule tuned against that baseline. The headline result: no single detection strategy covers all four attacks, and robust coverage comes from the union of a behavioral rule (process access) and an artifact rule (dump file). The behavioral rule keys on one invariant that every executed variant shares, the PROCESS_VM_READ right on lsass, which no credential dumper can avoid.
+I took one credential theft technique, reading the memory of `lsass.exe`, and tested four different execution methods against four independent detection strategies. I classified every one of the sixteen cells with an evidence-based reason, measured the benign false-positive surface, and built a Sigma rule tuned against that baseline. The headline result: no single detection strategy covers all four attacks, and robust coverage comes from the union of a behavioral rule (process access) and an artifact rule (dump file). Every attack that ran had to open lsass and request permission to read its memory. The rule detects exactly that one action, which is why it catches all of them regardless of the tool used.
 
 ---
 
@@ -17,8 +17,8 @@ I took one credential theft technique, reading the memory of `lsass.exe`, and te
 
 | Item | Value |
 |---|---|
-| Monitored endpoint | Target-PC, Windows 10 build 19045 (22H2) |
-| User context | `AMINE\Administrator` (elevated) |
+| Monitored endpoint | Target-PC, Windows 10 22H2 (build 19045) |
+| User context | `AMINE\Administrator`, elevated (admin token holds SeDebugPrivilege, which is what permits opening lsass memory) |
 | Domain | `amine.local` (NetBIOS AMINE), DC: ADDC01 |
 | Sysmon | 15.22 binary, olafhartong balanced config (release 15.21, schemaversion 4.91) |
 | Config SHA-256 | `64BEC37BA849C5F2934A55D2A29E7DDFAE46A30D56F7F2908D1F8A454898797E` (frozen for all variants) |
@@ -31,7 +31,7 @@ The single config hash governed all four attack runs, which is what makes the st
 
 ## 1. Hypothesis
 
-A process that opens a handle to `lsass.exe` with a memory-read-capable access right is a candidate for credential dumping. The claim is deliberately narrow: this detects the access *capability*, not proof that credentials were extracted.
+A process that opens a handle to `lsass.exe` with a memory-read-capable access right is a candidate for credential dumping. This detects that a process gained the ability to read lsass memory. It does not prove credentials were stolen, which is why the rule is rated medium severity, not high.
 
 ## 2. Data contract
 
@@ -157,6 +157,28 @@ When the rule fires: check the SourceImage path and signature, then the parent p
 Test the rule against the cases it is weakest on: reflective or in-memory Mimikatz (which produces UNKNOWN call-trace frames rather than on-disk ones), an open with a clean mask the rule does not list, and injection into a trusted source image. A rule surviving an evasion attempt is a valid result; a residual blind spot is documented, not hidden.
 
 ---
+
+## Evidence
+
+All screenshots are in [`evidence/`](./evidence). They are detection-side Splunk captures only (the query, plus SourceImage, GrantedAccess, CallTrace, command line, or file name). No Mimikatz output, hashes, or transcripts are included, by design.
+
+**The rule, before and after tuning:**
+
+![Untuned rule over the attack day](./evidence/rule-untuned-11hits.png)
+*Untuned rule over 2026-10-15: 11 hits. Six are benign boot-time access (wininit, csrss, Sysmon64), five are the attacks.*
+
+![Tuned rule over the attack day](./evidence/rule-tuned-5hits.png)
+*Tuned rule: 5 hits, all attacks, 0 false positives.*
+
+**Why the mask alone is not enough (same 0x1FFFFF, different intent):**
+
+![A1 comsvcs process access](./evidence/A1-S4-access.png)
+*A1 (comsvcs): 0x1FFFFF with a dbgcore then comsvcs call trace, the dump-engine fingerprint.*
+
+![A4 mimikatz process access](./evidence/A4-S4-access.png)
+*A4 (mimikatz): leaner 0x1010, call trace is all mimikatz frames with no dump engine. This is why the behavioral mask, not the call trace, is what unifies the variants.*
+
+**Full per-variant evidence** backing every cell of the matrix is in `evidence/`, named `A<n>-S<n>-*.png` (for example `A2-S3-dumpfile.png`, `A3-S4-empty.png`), plus `sensor-probe.png` for the baseline sensor check.
 
 ## Credential hygiene
 
