@@ -1,0 +1,39 @@
+```
+D02-C - Behavioural network detection for PowerShell download-and-execute (T1059.001).
+Detects the cradle's outbound connection (Sysmon EID 3) and correlates it to the
+process-creation event (EID 1) by ProcessGuid to recover identity. Catches the
+obfuscated variant that content keyword rules (D02-A, D02-B) miss.
+```
+
+```
+COLLECTION NOTE (important): short-lived processes (a `powershell.exe -c` cradle that
+exits in under a second) were OBSERVED generating an EID 3 whose Image is "<unknown
+process>" (indexed as &lt;unknown process&gt;) while still carrying a valid ProcessGuid.
+This is an observed attribution failure consistent with sensitivity to process lifetime;
+no internal cause is claimed. Image-based NetworkConnect include rules (olaf default) DROP
+exactly these events, so network must be collected independent of image for this
+analytic: collect broadly in a lab, or scope by destination (external / rare) in
+production. The correlation below uses the valid ProcessGuid on the unattributed event to
+recover identity from EID 1.
+```
+
+```D02-C correlation: a PowerShell-identity process that made an outbound connection. Recovers Image/OriginalFileName/CommandLine from EID 1 even when the EID 3 is unattributed. Filtering on OriginalFileName is rename-proof: a renamed powershell.exe keeps OriginalFileName=PowerShell.EXE. Validated on all four variants under the collect-all test config.```
+index=endpoint source="XmlWinEventLog:Microsoft-Windows-Sysmon/Operational" (EventCode=1 OR EventCode=3)
+| stats min(_time) as _time values(EventCode) as codes values(OriginalFileName) as OriginalFileName values(Image) as Image values(CommandLine) as CommandLine values(DestinationIp) as DestinationIp values(DestinationPort) as DestinationPort by host ProcessGuid
+| search codes=3 codes=1 DestinationIp=* OriginalFileName="PowerShell.EXE"
+| table _time host ProcessGuid OriginalFileName Image CommandLine DestinationIp DestinationPort
+
+```Diagnostic: with network collected independent of image, search by destination (not image) to reveal the unattributed events.```
+index=endpoint source="XmlWinEventLog:Microsoft-Windows-Sysmon/Operational" EventCode=3 DestinationIp="192.168.10.250"
+| table _time Image ProcessId ProcessGuid DestinationIp DestinationPort
+
+```
+Notes:
+- This is a LEAD (PowerShell made a connection), not proof of download-and-execute.
+  EID 3 carries connection metadata, not payload or execution proof. Corroborate with
+  D02-A / D02-B or follow-on activity.
+- Correlation requires the EID 1 inside the search window and a non-zero ProcessGuid.
+  Zero-GUID network events cannot be attributed; triage them separately.
+- Expressible as a Sigma correlation rule; not written for this release, kept as a
+  Splunk correlation search.
+```

@@ -1,0 +1,36 @@
+title: Suspicious PowerShell Download-and-Execute via Process Metadata (T1059.001)
+id: 2a1d7c64-9f0b-4e2a-bf11-6b6d02a10001
+status: experimental
+description: >
+    A PowerShell process, identified by image path or by OriginalFileName (so a
+    renamed copy is still caught), launched with a download or execution
+    indicator on its command line. Detects the common download-and-execute
+    cradle and encoded commands. Known limits (see the D02 study): content
+    keyword matching is defeated by string-construction obfuscation, and the
+    -enc match does not cover shorter flag forms (-e, -ec).
+references:
+    - https://attack.mitre.org/techniques/T1059/001/
+author: Mohamed Amine BAHRI
+date: 2026-11-01
+modified: 2026-11-05
+tags:
+    - attack.execution
+    - attack.t1059.001
+logsource:
+    category: process_creation
+    product: windows
+detection:
+    selection_powershell:
+        - Image|endswith: '\powershell.exe'
+        - OriginalFileName: 'PowerShell.EXE'
+    selection_indicator:
+        CommandLine|contains:
+            - 'DownloadString'
+            - 'IEX'
+            - '-enc'
+            - 'FromBase64String'
+    condition: selection_powershell and selection_indicator
+falsepositives:
+    - Legitimate download-and-execute admin activity (installer one-liners, bootstrap scripts) produces the same command-line evidence as the attack.
+    - Download-only commands also match, because DownloadString alone is an indicator (the download-only control run in the D02 study).
+level: medium
