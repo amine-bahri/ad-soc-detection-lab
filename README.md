@@ -79,7 +79,7 @@ The project is currently in Phase 2. Detection analytics are built Splunk-first,
 | ID | Objective | ATT&CK | Tactic | Status |
 |---|---|---|---|---|
 | D01 | Suspicious LSASS access | T1003.001 | Credential Access | complete (Splunk) |
-| D02 | Suspicious PowerShell execution | T1059.001 | Execution | planned |
+| D02 | Suspicious PowerShell execution | T1059.001 | Execution | complete (Splunk) |
 | D03 | Suspicious service-ticket requests (Kerberoasting) | T1558.003 | Credential Access | planned |
 | D04 | Suspicious remote service execution | T1021.002 / T1569.002 | Lateral Movement | planned |
 | D05 | Suspicious account privilege assignment | T1098 | Persistence | planned |
