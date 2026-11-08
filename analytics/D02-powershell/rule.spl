@@ -1,0 +1,22 @@
+```
+D02 - Suspicious PowerShell Execution (T1059.001).
+The two content analytics as Splunk searches. Copy ONE block at a time.
+These are the frozen rules used across all four variants. The ``` ``` lines are Splunk inline comments.
+Prerequisite: PowerShell script-block logging (EID 4104) enabled and the
+Microsoft-Windows-PowerShell/Operational channel collected into index=endpoint.
+```
+
+```D02-A - process metadata (Sysmon EID 1). PowerShell by image OR original file name (survives a rename), with a download/execution indicator on the command line.```
+index=endpoint source="XmlWinEventLog:Microsoft-Windows-Sysmon/Operational" EventCode=1
+(Image="*\\powershell.exe" OR OriginalFileName="PowerShell.EXE")
+(CommandLine="*DownloadString*" OR CommandLine="*IEX*" OR CommandLine="*-enc*" OR CommandLine="*FromBase64String*")
+| table _time host User ParentImage OriginalFileName Image CommandLine
+
+```D02-B - script-block content (EID 4104). Any script block containing a download/execution indicator. Catches the decoded form of an -enc command; does NOT see through string-concatenation obfuscation. ProcessID is shown because 4104 has no ProcessGuid: it is the only way to tell the child's block from the launching PowerShell window's own block.```
+index=endpoint source="XmlWinEventLog:Microsoft-Windows-PowerShell/Operational" EventCode=4104
+(ScriptBlockText="*DownloadString*" OR ScriptBlockText="*Net.WebClient*" OR ScriptBlockText="*IEX*" OR ScriptBlockText="*Invoke-Expression*" OR ScriptBlockText="*FromBase64String*")
+| table _time host ProcessID ScriptBlockId MessageNumber MessageTotal ScriptBlockText
+
+```Telemetry-presence check used for variant 3 (proves an obfuscated run was logged even when the rules above return nothing). Searches fragments the rules do NOT key on.```
+index=endpoint source="XmlWinEventLog:Microsoft-Windows-PowerShell/Operational" EventCode=4104 ("Net.We" OR "char]73" OR "192.168.10.250")
+| table _time host ProcessID ScriptBlockId MessageNumber MessageTotal ScriptBlockText

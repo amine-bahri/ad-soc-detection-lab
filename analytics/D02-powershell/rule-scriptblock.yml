@@ -1,0 +1,37 @@
+title: Suspicious PowerShell Script Block Content (T1059.001)
+id: 2a1d7c64-9f0b-4e2a-bf11-6b6d02a10002
+status: experimental
+description: >
+    A PowerShell script block (Event ID 4104) whose content contains a download
+    or execution indicator. Because script-block logging records the
+    base64-decoded script, this catches the decoded form of an encoded (-enc)
+    command. It does not match the string-construction obfuscation variant in the
+    D02 study, whose keywords are assembled at runtime and never appear as literal
+    text in the logged block. That is specific to that technique, not a general
+    claim that 4104 is blind to all obfuscation. Matching unit: a single script block.
+references:
+    - https://attack.mitre.org/techniques/T1059/001/
+author: Mohamed Amine BAHRI
+date: 2026-11-01
+modified: 2026-11-05
+tags:
+    - attack.execution
+    - attack.t1059.001
+logsource:
+    product: windows
+    category: ps_script
+    definition: 'Script Block Logging must be enabled (EID 4104, Microsoft-Windows-PowerShell/Operational)'
+detection:
+    selection:
+        ScriptBlockText|contains:
+            - 'DownloadString'
+            - 'Net.WebClient'
+            - 'IEX'
+            - 'Invoke-Expression'
+            - 'FromBase64String'
+    condition: selection
+falsepositives:
+    - Administrative scripts that download with Net.WebClient or run code with Invoke-Expression.
+    - The PowerShell window that launches the cradle logs its own command as a 4104 block, so one execution can produce several hits. Attribute each hit to a process by the event's ProcessID.
+    - Not independent of the process-metadata rule when the same content appears in both the command line and the script block.
+level: medium

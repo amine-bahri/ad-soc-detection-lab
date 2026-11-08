@@ -1,0 +1,53 @@
+```
+D02 CAPSTONE - "Suspicious PowerShell network execution" (T1059.001). Lab-validated.
+One correlation search joining Sysmon EID 1 and EID 3 by host + ProcessGuid. It combines
+the command-line signal (D02-A side) with the network correlation (D02-C).
+Requires: PowerShell identity (EID 1) AND outbound connection (EID 3), then raises an
+ALERT if any corroborating context is present, otherwise returns a HUNT (egress only).
+
+Collection contract: network must be collected independent of image (short-lived cradles
+log EID 3 as "<unknown process>", indexed as &lt;unknown process&gt;); collect broadly or
+by destination, then correlate.
+
+Scope note: the script-block signal (D02-B, PowerShell EID 4104) has no ProcessGuid, so it
+is NOT folded into this correlation; D02-B remains a separate content detector.
+"Suspicious destination" is a production hook, not implemented and not lab-testable here
+(lab C2 is an internal IP).
+```
+
+index=endpoint source="XmlWinEventLog:Microsoft-Windows-Sysmon/Operational" (EventCode=1 OR EventCode=3)
+| eval img1=if(tonumber(EventCode)==1, Image, null())
+| stats values(EventCode) as codes values(OriginalFileName) as OriginalFileName values(Image) as Image values(img1) as Image1 values(CommandLine) as CommandLine values(ParentImage) as ParentImage values(DestinationIp) as DestinationIp values(DestinationPort) as DestinationPort by host ProcessGuid
+| search codes=1 codes=3 OriginalFileName="PowerShell.EXE" DestinationIp=*
+| eval cl=lower(mvjoin(CommandLine," ")), par=lower(mvjoin(ParentImage,";")), img1_name=lower(replace(mvindex(Image1,0),"^.*\\\\",""))
+| eval cond_content = if(match(cl,"downloadstring|iex|invoke-expression|frombase64string|webclient|-enc"),1,0)
+| eval cond_renamed = if(img1_name=="powershell.exe",0,1)
+| eval cond_parent  = if(match(par,"winword|excel|powerpnt|outlook|wscript|cscript|mshta|rundll32"),1,0)
+| eval context = cond_content + cond_renamed + cond_parent
+| eval verdict = if(context>0,"ALERT","HUNT: egress only")
+| table verdict host ProcessGuid OriginalFileName Image ParentImage DestinationIp DestinationPort cond_content cond_renamed cond_parent CommandLine
+
+```
+Verified on the final pass (2026-11-02), each run matched by ProcessGuid:
+- V1 clear-text   -> ALERT (cond_content)
+- V2 encoded      -> ALERT (cond_content on -enc)
+- V3 obfuscated   -> HUNT  (no content keyword, not renamed, benign parent: egress only)
+- V4 renamed      -> ALERT (cond_renamed: the EID 1 image is not named powershell.exe
+                     while OriginalFileName is PowerShell.EXE; cond_content also 1)
+- Control (download only, nothing executed) -> ALERT (cond_content: downloadstring)
+V3 as a HUNT is the intended result: obfuscated egress with no corroborating context is a
+hunt lead, not an automatic alert. Do not add conditions to force it to ALERT.
+Validated under the collect-all test collection config; not operational under a config
+that drops the short-lived EID 3.
+
+Known weaknesses: cond_content is a finite keyword list; cond_parent was never exercised
+in the lab (always 0).
+
+Operational use:
+- One alert per process, carrying command line, OriginalFileName, parent, destination, and
+  which conditions matched.
+- Keep D02-A and D02-B as separate content detectors; this search does not replace them
+  and must not be required for every detection.
+- HUNT (egress only) is hunting/enrichment, not a standalone alert.
+- Tune with narrowly scoped exceptions for verified admin workflows, not blanket allowlists.
+```
